@@ -1,0 +1,329 @@
+/*
+By Guy Dupont
+
+<metadata description="Click and drag to draw rectangles.  When the ball collides, MIDI notes will be triggered." target="Lightpad" tags="MIDI;Melodic;" >
+    <modes>
+        <mode name="Default"/>
+    </modes>
+    <variables>
+        <variable name="MIDI_CHANNEL" displayName="MIDI Channel" type="int" min="1" max="16" value="1" displayMode="stepper" />
+        <variable name="STRIKE_VELOCITY" displayName="Strike Velocity" type="int" min="0" max="127" value="115" displayMode="stepper" />
+	    <variable name="velocityX" displayName="X Velocity" type="float" min="0.1" max="2.0" value="0.5" displayMode="stepper" />
+	    <variable name="velocityY" displayName="Y Velocity" type="float" min="0.1" max="2.0" value="0.5" displayMode="stepper" />
+	    <vector count="4" wantsGetFunctions="true" wantsSetFunctions="true">
+            <variable name="entity" type="int" value="0" visible="false" />
+            <variable name="colour" displayName="Colour" type="colour" value="random" visible="false" />
+        </vector>
+        <vector count="8" wantsGetFunctions="true" wantsSetFunctions="true">
+            <variable name="note" type="int" value="0" visible="false" />
+        </vector>
+        <vector count="8" wantsGetFunctions="true" wantsSetFunctions="true">
+            <variable name="bitArrayChunk" type="int" value="0" visible="false" />
+        </vector>
+	</variables>
+
+</metadata>
+*/
+
+//==============================================================================
+// "endless" frame counter
+int frame;
+
+// current position of ball
+float posX, posY;
+
+// last position of ball
+int lastX, lastY;
+
+// default colors
+int EDGE_COLOR, BALL_COLOR;
+
+// entity you're currently drawing
+int currentEntity;
+// number of possible entities
+int MAX_ENTITY;
+
+// constants
+int FOUR_BIT_MASK;
+int PIXELS_PER_ROW;
+int NOTES;
+float MAX_TOUCH_POINT;
+// factor by which to slow animation
+// setting to 3 runs the program 1/3 as fast
+int FRAME_SLOWDOWN;
+
+// point where finger was first placed
+float touchStartX, touchStartY;
+
+// is program running
+bool running;
+
+void initialise() {
+
+    MAX_ENTITY = 3;
+    FOUR_BIT_MASK = 15;
+    PIXELS_PER_ROW = 15;
+    MAX_TOUCH_POINT = 2.0;
+    EDGE_COLOR = makeARGB(255, 255, 70, 140);
+    BALL_COLOR = makeARGB(255, 0, 70, 200);
+    FRAME_SLOWDOWN = 1;
+    NOTES = 8;
+
+    setNote(0, 36);
+    setNote(1, 60);
+    setNote(2, 67);
+    setNote(3, 88);
+    setNote(4, 79);
+    setNote(5, 74);
+    setNote(6, 93);
+    setNote(7, 108);
+
+    running = false;
+    posX = PIXELS_PER_ROW / 2;
+    posY = PIXELS_PER_ROW / 2;
+
+    clearDisplay();
+    createEdges();
+    drawBitmap();
+    updatePixel();
+
+}
+
+// draw all points on screen
+void drawBitmap() {
+    for (int i = 0; i < PIXELS_PER_ROW; i++) {
+        for (int j = 0; j < PIXELS_PER_ROW; j++) {
+            int x = getBitAt(i, j);
+            if (x != 0) {
+                fillPixel(EDGE_COLOR, i, j);
+            }
+        }
+    }
+}
+
+// draw initial screen, clear everything but edges
+void createEdges() {
+    int lastRow = PIXELS_PER_ROW - 1;
+    for (int i = 0; i < PIXELS_PER_ROW; i++) {
+        for (int j = 0; j < PIXELS_PER_ROW; j++) {
+            if (i == 0 || j == 0 || i == lastRow || j == lastRow) {
+                setBitOn(i, j);
+            } else {
+                setBitOff(i, j);
+            }
+        }
+    }
+}
+
+void repaint() {
+    if (!running) return;
+    frame++;
+    if (frame % FRAME_SLOWDOWN == 0) {
+        nextFrame();
+    }
+}
+
+void nextFrame() {
+    clearDisplay();
+    updatePixel();
+    drawBitmap();
+    for(int i = 0; i < MAX_ENTITY; i++) {
+        drawRectFromEntity(getColour(i), getEntity(i));
+    }
+}
+
+void touchStart(int index, float x, float y, float z, float vz) {
+    if (index != 1) return;
+    if (!running) return;
+    touchStartX = x;
+    touchStartY = y;
+}
+
+void touchEnd(int index, float x, float y, float z, float vz) {
+    if (index != 1) return;
+    if (!running) return;
+    int xDiff = defaultMap(abs(x - touchStartX));
+    int yDiff = defaultMap(abs(y - touchStartY));
+    int startX = x < touchStartX ? defaultMap(x) : defaultMap(touchStartX);
+    int startY = y < touchStartY ? defaultMap(y) : defaultMap(touchStartY);
+    setEntity(currentEntity, startX, startY, xDiff, yDiff);
+    currentEntity = (++currentEntity) % MAX_ENTITY;
+}
+
+void touchMove(int index, float x, float y, float z, float vz) {
+    if (index != 1) return;
+    if (!running) {
+        moveBallManually(x, y);
+        return;
+    }
+    int xDiff = defaultMap(abs(x - touchStartX));
+    int yDiff = defaultMap(abs(y - touchStartY));
+    int startX = x < touchStartX ? defaultMap(x) : defaultMap(touchStartX);
+    int startY = y < touchStartY ? defaultMap(y) : defaultMap(touchStartY);
+    fillRect(getColour(currentEntity), startX, startY, xDiff, yDiff);
+}
+
+// force ball to given location, used when program is paused
+void moveBallManually(float x, float y){
+    posX = defaultMap(x);
+    posY = defaultMap(y);
+    clearDisplay();
+    fillPixel(BALL_COLOR, int(posX), int(posY));
+    drawBitmap();
+}
+
+// pack entity information into 32 bits
+int entityFromEdges(int x, int y, int width, int height) {
+    int packedEntity = 0;
+    packedEntity = packedEntity | x;
+    packedEntity = packedEntity | (y << 4);
+    packedEntity = packedEntity | (width << 8);
+    packedEntity = packedEntity | (height << 12);
+    return packedEntity;
+}
+
+// draw entity on screen
+void drawRectFromEntity(int color, int entity) {
+    if (entity == 0) return;
+    int x = entity & FOUR_BIT_MASK;
+    int y = (entity & (FOUR_BIT_MASK << 4)) >> 4;
+    int width = (entity & (FOUR_BIT_MASK << 8)) >> 8;
+    int height = (entity & (FOUR_BIT_MASK << 12)) >> 12;
+    fillRect(color, x, y, width, height);
+}
+
+// touch events register between 0.0 and 2.0 on each axis
+// convert this to pixel value
+int defaultMap(float in) {
+    return int(map(in, 0.0, MAX_TOUCH_POINT, 0.0, float(PIXELS_PER_ROW)));
+}
+
+// move ball, check for collisions
+void updatePixel() {
+    posX += velocityX;
+    posY += velocityY;
+    int x = int(posX);
+    int y = int(posY);
+    bool yColl = getCollisionY();
+    bool xColl = getCollisionX();
+    // if only one dimen changes, don't update yet - eliminates weird zig zag
+    // but always update if there's a collision
+    if ((x == lastX || y == lastY) && !(yColl || xColl)){
+        fillPixel(BALL_COLOR, lastX, lastY);
+    } else {
+        fillPixel(BALL_COLOR, x, y);
+        lastX = x;
+        lastY = y;
+    }
+}
+
+// returns true if ball will collide with entity above/below in next frame
+bool getCollisionY() {
+    float adjust = posY + velocityY;
+    int nextPoint = getBitAt(int(posX), int(adjust));
+    if (nextPoint != 0) {
+        velocityY = -velocityY;
+        logCollision(int(posX), int(adjust));
+        return true;
+    }
+    return false;
+}
+
+// returns true if ball will collide with entity left/right in next frame
+bool getCollisionX() {
+    float adjust = posX + velocityX;
+    int nextPoint = getBitAt(int(adjust), int(posY));
+    if (nextPoint != 0) {
+        velocityX = -velocityX;
+        logCollision(int(adjust), int(posY));
+        return true;
+    }
+    return false;
+}
+
+// we detected a collision at (x, y), now figure out which entity lives there
+void logCollision(int x, int y) {
+    // on edge collision
+    if (x == 0) { sendNoteOff(MIDI_CHANNEL, getNote(0), 0); sendNoteOn(MIDI_CHANNEL, getNote(0), STRIKE_VELOCITY); }
+    else if (x == 14) { sendNoteOff(MIDI_CHANNEL, getNote(1), 0); sendNoteOn(MIDI_CHANNEL, getNote(1), STRIKE_VELOCITY); }
+    else if (y == 0)  { sendNoteOff(MIDI_CHANNEL, getNote(2), 0); sendNoteOn(MIDI_CHANNEL, getNote(2), STRIKE_VELOCITY); }
+    else if (y == 14) {  sendNoteOff(MIDI_CHANNEL, getNote(3), 0); sendNoteOn(MIDI_CHANNEL, getNote(3), STRIKE_VELOCITY); }
+    // on entity collision - start at 4 since we already handled walls
+    int noteOffset = 4;
+    for (int i = 0; i < MAX_ENTITY; i++) {
+        if (didCollide(getEntity(i), x, y)) {
+            int note = getNote(i + noteOffset);
+            sendNoteOff(MIDI_CHANNEL, note, 0); sendNoteOn(MIDI_CHANNEL, note, STRIKE_VELOCITY);
+        }
+    }
+}
+
+// returns true if point at (x, y) is part of entity
+bool didCollide(int entity, int x, int y) {
+    if (entity == 0) return false;
+    int ex = entity & FOUR_BIT_MASK;
+    int ey = (entity & (FOUR_BIT_MASK << 4)) >> 4;
+    int width = (entity & (FOUR_BIT_MASK << 8)) >> 8;
+    int height = (entity & (FOUR_BIT_MASK << 12)) >> 12;
+    return x >= ex && x <= ex + width && y >= ey && y <= ey + height;
+}
+
+void handleButtonUp(int index) {
+    running = ! running;
+    if (running) return;
+    // turn all notes off if paused
+    for (int i= 0; i < NOTES; i++) {
+        sendNoteOff(MIDI_CHANNEL, getNote(i), 0);
+    }
+}
+
+// bitmap accessors
+
+void setBitOn(int x, int y) {
+    int xy = (x * PIXELS_PER_ROW) + y;
+    int index = xy / 32;
+    int bit = xy % 32;
+    setBitArrayChunk(index, getBitArrayChunk(index) | 1 << bit);
+}
+
+void setBitOff(int x, int y) {
+    int xy = (x * PIXELS_PER_ROW) + y;
+    int index = xy / 32;
+    int bit = xy % 32;
+    setBitArrayChunk(index, getBitArrayChunk(index) & ~(1 << bit));
+}
+
+int getBitAt(int x, int y) {
+    int xy = (x * PIXELS_PER_ROW) + y;
+    int index = xy / 32;
+    int bit = xy % 32;
+    return getBitArrayChunk(index) & (1 << bit);
+}
+
+// draws rectangle into bitmap
+void setEntity(int index, int x, int y, int width, int height) {
+    for (int i = x; i < width + x; i++) {
+        for (int j = y; j < height + y; j++) {
+            setBitOn(i, j);
+        }
+    }
+    int entity = entityFromEdges(x, y, width, height);
+    clearEntity(getEntity(index));
+    setEntity(index, entity);
+}
+
+// removes rectangle from bitmap
+void clearEntity(int entity) {
+    if (entity == 0) return;
+    int lastRow = PIXELS_PER_ROW - 1;
+    int x = entity & FOUR_BIT_MASK;
+    int y = (entity & (FOUR_BIT_MASK << 4)) >> 4;
+    int width = (entity & (FOUR_BIT_MASK << 8)) >> 8;
+    int height = (entity & (FOUR_BIT_MASK << 12)) >> 12;
+    for (int i = x; i < width + x; i++) {
+        for (int j = y; j < height + y; j++) {
+            if (i > 0 && i < lastRow && j > 0 && j < lastRow)
+                setBitOff(i, j);
+        }
+    }
+}

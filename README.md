@@ -3,4 +3,10 @@ by Guy Dupont
 
 [YouTube demo here!](https://youtu.be/O47i_-W_0F4)
 
-This patch was designed to be run on [ROLI's Lightpad Block](https://roli.com/products/blocks/lightpad-block).  It is written in their proprietary Littlefoot language.  To run this on your Lightpad, first install and run [BLOCKS Code](https://juce.com/blocks/code).  With your device plugged in, click `File`, followed by `New File`.  Copy and paste the code from the .littlefoot file in this directory into the editor in the BLOCKS Dashboard.  The program should automatically load on to your Lightpad upon saving.  If not, you can manually compile/upload from the `Compile` menu. Feel free to make a pull request with any changes you make - I'd love to hear from other users.
+This patch was designed to be run on [ROLI's Lightpad Block / Lightpad Block M](https://roli.com/products/blocks/lightpad-block).  It is written in [Littlefoot](https://support.roli.com/support/solutions/articles/36000019133-what-is-littlefoot-)!
+To run this on your Lightpad:
+1. Install and open the [ROLI Dashboard](https://roli.com/products/software/blocks-dashboard). 
+2. Download the `.littlefoot` file from this repository.
+3. In ROLI Dashboard, Click `File`, followed by `Open`.  Select the file downloaded in step 2.
+4. You will be asked if you'd like the patch to be added to the list of applications - it's easiest to say yes.
+5. With your Block plugged in, you should be able to select the application from the list.  It will automatically load on the device!
